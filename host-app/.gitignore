@@ -1,0 +1,8 @@
+node_modules/
+sidecar/dist/
+src-tauri/target/
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+src-tauri/icons/*
+!src-tauri/icons/.gitkeep
+src-tauri/gen/

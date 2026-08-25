@@ -1,0 +1,27 @@
+{
+  "name": "screenshare-sidecar",
+  "version": "1.0.0",
+  "description": "Servidor de sinalização + TURN, empacotado como sidecar do app Tauri",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "build": "pkg . --output dist/server",
+    "rename": "node rename.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "node-turn": "^0.0.6"
+  },
+  "overrides": {
+    "js-yaml": "3.15.1",
+    "flatted": "^3.3.3",
+    "log4js": "^6.9.1"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.16.0"
+  },
+  "pkg": {
+    "assets": ["public/**/*"],
+    "targets": ["node18-win-x64"]
+  }
+}

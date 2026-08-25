@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>ScreenShare Host</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #111;
+    color: #eee;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.3rem; margin-bottom: 4px; }
+  #status { color: #999; font-size: 0.9rem; margin-bottom: 16px; text-align: center; }
+  #shareUrl {
+    background: #1e1e1e;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 0.95rem;
+    color: #7fd0ff;
+    margin-bottom: 16px;
+    user-select: all;
+  }
+  button {
+    background: #2d6cdf;
+    color: white;
+    border: none;
+    padding: 14px 28px;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #4a80e6; }
+  video {
+    width: 100%;
+    max-width: 1100px;
+    background: #000;
+    border-radius: 8px;
+    margin-top: 16px;
+  }
+  #stopBtn { background: #d9433f; margin-top: 16px; }
+  #stopBtn:hover { background: #e8615d; }
+  #volumeRow {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    color: #ccc;
+    font-size: 0.9rem;
+  }
+  #volumeSlider { width: 200px; }
+</style>
+</head>
+<body>
+  <h1>🖥️ ScreenShare Host</h1>
+  <div id="status">Iniciando servidor local...</div>
+  <div id="shareUrl" style="display:none"></div>
+
+  <button id="hostBtn" style="display:none">Compartilhar minha tela</button>
+  <video id="video" autoplay playsinline style="display:none"></video>
+  <button id="stopBtn" style="display:none">Encerrar</button>
+
+  <script src="client.js"></script>
+</body>
+</html>
