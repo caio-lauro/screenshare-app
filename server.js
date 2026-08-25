@@ -46,12 +46,14 @@ const server = http.createServer((req, res) => {
 //   Cliente -> Servidor:
 //     { type: 'hello', role: 'host' | 'viewer' }
 //     { type: 'offer'|'answer'|'ice', to: <id>, ...payload }
+//     { type: 'chat', name: <string>, text: <string> }
 //   Servidor -> Cliente:
 //     { type: 'welcome', id: <seuId> }
 //     { type: 'viewer-joined', id: <idDoViewer> }   (só o host recebe)
 //     { type: 'viewer-left', id: <idDoViewer> }      (só o host recebe)
 //     { type: 'host-left' }                          (viewers recebem)
 //     { type: 'offer'|'answer'|'ice', from: <id>, ...payload }  (repassado)
+//     { type: 'chat', name, text, ts }                (todo mundo recebe)
 
 const wss = new WebSocketServer({ server });
 
@@ -88,6 +90,20 @@ wss.on('connection', (ws) => {
     if (['offer', 'answer', 'ice'].includes(msg.type) && msg.to != null) {
       const target = clients.get(msg.to);
       if (target) send(target.ws, { ...msg, from: id });
+      return;
+    }
+
+    // Chat: transmite pra todo mundo conectado (host + todos os viewers),
+    // incluindo quem mandou — assim não precisa de lógica separada de "eco".
+    if (msg.type === 'chat') {
+      const chatMsg = {
+        type: 'chat',
+        name: String(msg.name || 'Anônimo').slice(0, 24),
+        text: String(msg.text || '').slice(0, 300),
+        ts: Date.now(),
+      };
+      if (!chatMsg.text.trim()) return;
+      for (const [, c] of clients) send(c.ws, chatMsg);
     }
   });
 
