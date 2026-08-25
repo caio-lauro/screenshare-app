@@ -5,7 +5,8 @@
   "main": "server.js",
   "bin": "server.js",
   "scripts": {
-    "build": "pkg . --output dist/server",
+    "sync": "node -e \"const fs=require('fs'); fs.rmSync('public',{recursive:true,force:true}); fs.cpSync('../../public','public',{recursive:true});\"",
+    "build": "npm run sync && pkg . --output dist/server",
     "rename": "node rename.js"
   },
   "dependencies": {

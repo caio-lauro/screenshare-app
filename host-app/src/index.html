@@ -25,9 +25,34 @@
     font-family: monospace;
     font-size: 0.95rem;
     color: #7fd0ff;
-    margin-bottom: 16px;
     user-select: all;
   }
+  #shareUrlRow {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  #copyUrlBtn {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+  #otherIpsDetails {
+    display: none;
+    color: #888;
+    font-size: 0.82rem;
+    margin-bottom: 16px;
+    max-width: 400px;
+  }
+  #otherIpsDetails summary { cursor: pointer; color: #aaa; }
+  .ipRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-family: monospace;
+  }
+  .ipRow button { padding: 4px 10px; font-size: 0.78rem; }
   button {
     background: #2d6cdf;
     color: white;
@@ -38,12 +63,26 @@
     cursor: pointer;
   }
   button:hover { background: #4a80e6; }
-  video {
-    width: 100%;
-    max-width: 1100px;
-    background: #000;
+  #liveBadge {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #1e1e1e;
     border-radius: 8px;
-    margin-top: 16px;
+    font-size: 0.95rem;
+  }
+  #liveDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e8433f;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
   #stopBtn { background: #d9433f; margin-top: 16px; }
   #stopBtn:hover { background: #e8615d; }
@@ -56,16 +95,76 @@
     font-size: 0.9rem;
   }
   #volumeSlider { width: 200px; }
+  #chatPanel {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    max-width: 500px;
+    margin-top: 20px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  #chatLog {
+    height: 220px;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  #chatLog .msg { margin-bottom: 4px; word-wrap: break-word; }
+  #chatLog .msg b { color: #7fd0ff; }
+  #chatInputRow {
+    display: flex;
+    gap: 6px;
+    padding: 10px;
+    border-top: 1px solid #2a2a2a;
+  }
+  #chatName {
+    width: 90px;
+    background: #222;
+    border: 1px solid #333;
+    color: #eee;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+  #chatText {
+    flex: 1;
+    background: #222;
+    border: 1px solid #333;
+    color: #eee;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+  #chatSendBtn { padding: 8px 14px; font-size: 0.85rem; }
 </style>
 </head>
 <body>
   <h1>🖥️ ScreenShare Host</h1>
   <div id="status">Iniciando servidor local...</div>
-  <div id="shareUrl" style="display:none"></div>
+  <div id="shareUrlRow">
+    <span id="shareUrl"></span>
+    <button id="copyUrlBtn">Copiar</button>
+  </div>
+  <details id="otherIpsDetails">
+    <summary>Outros endereços detectados</summary>
+    <div id="otherIpsList"></div>
+  </details>
 
   <button id="hostBtn" style="display:none">Compartilhar minha tela</button>
-  <video id="video" autoplay playsinline style="display:none"></video>
+  <div id="liveBadge"><span id="liveDot"></span> Transmitindo ao vivo</div>
   <button id="stopBtn" style="display:none">Encerrar</button>
+
+  <div id="chatPanel">
+    <div id="chatLog"></div>
+    <div id="chatInputRow">
+      <input id="chatName" placeholder="Seu nome" maxlength="24">
+      <input id="chatText" placeholder="Mensagem..." maxlength="300">
+      <button id="chatSendBtn">Enviar</button>
+    </div>
+  </div>
 
   <script src="client.js"></script>
 </body>

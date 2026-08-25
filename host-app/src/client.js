@@ -1,8 +1,17 @@
 const statusEl = document.getElementById('status');
+const shareUrlRow = document.getElementById('shareUrlRow');
 const shareUrlEl = document.getElementById('shareUrl');
+const copyUrlBtn = document.getElementById('copyUrlBtn');
+const otherIpsDetails = document.getElementById('otherIpsDetails');
+const otherIpsList = document.getElementById('otherIpsList');
 const hostBtn = document.getElementById('hostBtn');
 const liveBadge = document.getElementById('liveBadge');
 const stopBtn = document.getElementById('stopBtn');
+const chatPanel = document.getElementById('chatPanel');
+const chatLog = document.getElementById('chatLog');
+const chatName = document.getElementById('chatName');
+const chatText = document.getElementById('chatText');
+const chatSendBtn = document.getElementById('chatSendBtn');
 
 // O sidecar (server.js empacotado) sempre roda na própria máquina do host,
 // então aqui a conexão é sempre local — diferente do public/client.js original,
@@ -20,6 +29,11 @@ const ICE_SERVERS = [
 let ws;
 let localStream = null; // stream original do getDisplayMedia (vídeo + áudio cru)
 const peerConnections = new Map(); // viewerId -> RTCPeerConnection
+// Viewers que entraram na sala ANTES de você clicar em "Compartilhar" ficam
+// aqui em espera — sem isso, o "viewer-joined" deles chegaria com
+// localStream ainda null, a oferta falharia silenciosamente, e ninguém
+// tentaria de novo depois que você começasse a compartilhar.
+const pendingViewers = new Set();
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -30,20 +44,32 @@ function connectToSidecar(attempt = 1) {
 
   ws.onopen = () => {
     statusEl.textContent = 'Servidor pronto. Peça pros seus amigos acessarem o endereço abaixo (na mesma rede Radmin):';
-    shareUrlEl.textContent = `http://<SEU-IP-RADMIN>:3000`;
-    shareUrlEl.style.display = 'block';
+    shareUrlEl.textContent = `http://<SEU-IP-RADMIN>:3000`; // placeholder até o local-ips chegar
+    shareUrlRow.style.display = 'flex';
     hostBtn.style.display = 'inline-block';
+    chatPanel.style.display = 'flex';
     send({ type: 'hello', role: 'host' });
   };
 
   ws.onmessage = async (event) => {
     const msg = JSON.parse(event.data);
     switch (msg.type) {
+      case 'local-ips':
+        renderShareUrl(msg.ips);
+        break;
       case 'viewer-joined':
-        await createOfferFor(msg.id);
+        if (localStream) {
+          await createOfferFor(msg.id);
+        } else {
+          pendingViewers.add(msg.id); // ainda não começamos a compartilhar
+        }
         break;
       case 'viewer-left':
+        pendingViewers.delete(msg.id);
         closeConnectionFor(msg.id);
+        break;
+      case 'chat':
+        appendChatMessage(msg);
         break;
       case 'answer':
         await handleAnswer(msg);
@@ -65,6 +91,45 @@ function connectToSidecar(attempt = 1) {
 }
 
 connectToSidecar();
+
+// Escolhe o endereço mais provável de ser o da Radmin (ranges 25.x.x.x e
+// 26.x.x.x, que é o que ela costuma usar) e mostra os outros como opção
+// caso o palpite esteja errado — sem esconder informação, só priorizar.
+function renderShareUrl(ips) {
+  if (!ips || ips.length === 0) return; // mantém o placeholder manual
+
+  const radminLike = ips.find((ip) => /^2[56]\./.test(ip.address));
+  const primary = radminLike || ips[0];
+  const url = `http://${primary.address}:3000`;
+
+  shareUrlEl.textContent = url;
+  copyUrlBtn.onclick = () => {
+    navigator.clipboard.writeText(url);
+    copyUrlBtn.textContent = 'Copiado!';
+    setTimeout(() => (copyUrlBtn.textContent = 'Copiar'), 1500);
+  };
+
+  const others = ips.filter((ip) => ip.address !== primary.address);
+  otherIpsList.innerHTML = '';
+  if (others.length === 0) {
+    otherIpsDetails.style.display = 'none';
+  } else {
+    otherIpsDetails.style.display = 'block';
+    others.forEach((ip) => {
+      const otherUrl = `http://${ip.address}:3000`;
+      const row = document.createElement('div');
+      row.className = 'ipRow';
+      const label = document.createElement('span');
+      label.textContent = `${otherUrl} (${ip.name})`;
+      const btn = document.createElement('button');
+      btn.textContent = 'Copiar';
+      btn.onclick = () => navigator.clipboard.writeText(otherUrl);
+      row.appendChild(label);
+      row.appendChild(btn);
+      otherIpsList.appendChild(row);
+    });
+  }
+}
 
 // ---------- Compartilhar tela ----------
 hostBtn.onclick = async () => {
@@ -94,6 +159,13 @@ hostBtn.onclick = async () => {
   statusEl.textContent = 'Compartilhando! Seus amigos já podem entrar pelo link acima. Dica: escolha "Janela" (não "Tela inteira") no seletor pra deixar o Discord fora do áudio, e minimize esta janela pela bandeja pra economizar recursos.';
 
   localStream.getVideoTracks()[0].onended = () => stopSharing();
+
+  // Cria a oferta agora pra qualquer viewer que já estava esperando na sala
+  // antes de você clicar em compartilhar.
+  for (const viewerId of pendingViewers) {
+    await createOfferFor(viewerId);
+  }
+  pendingViewers.clear();
 };
 
 async function createOfferFor(viewerId) {
@@ -160,6 +232,7 @@ function stopSharing() {
   if (localStream) localStream.getTracks().forEach((t) => t.stop());
   for (const [, pc] of peerConnections) pc.close();
   peerConnections.clear();
+  localStream = null;
   liveBadge.style.display = 'none';
   stopBtn.style.display = 'none';
   hostBtn.style.display = 'inline-block';
@@ -167,3 +240,36 @@ function stopSharing() {
 }
 
 stopBtn.onclick = stopSharing;
+
+// ---------- Chat ----------
+// O nome fica salvo no localStorage do app, então não precisa digitar de
+// novo toda vez que abrir (armazenamento local do próprio WebView do Tauri,
+// separado do localStorage usado pelos amigos no navegador).
+const STORAGE_KEY = 'screenshare_username';
+chatName.value = localStorage.getItem(STORAGE_KEY) || '';
+chatName.onchange = () => localStorage.setItem(STORAGE_KEY, chatName.value.trim());
+
+function appendChatMessage(msg) {
+  const line = document.createElement('div');
+  line.className = 'msg';
+  const time = new Date(msg.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  line.innerHTML = `<span style="color:#666">[${time}]</span> <b></b>: <span></span>`;
+  line.querySelector('b').textContent = msg.name;
+  line.querySelector('span:last-child').textContent = msg.text;
+  chatLog.appendChild(line);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function sendChat() {
+  const text = chatText.value.trim();
+  if (!text) return;
+  const name = chatName.value.trim() || 'Anônimo';
+  localStorage.setItem(STORAGE_KEY, name);
+  send({ type: 'chat', name, text });
+  chatText.value = '';
+}
+
+chatSendBtn.onclick = sendChat;
+chatText.onkeydown = (e) => {
+  if (e.key === 'Enter') sendChat();
+};

@@ -1,10 +1,28 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 const Turn = require('node-turn');
 
 const PORT = process.env.PORT || 3000;
+
+// Lista os IPv4 locais da máquina (exceto loopback). Usado pra sugerir
+// automaticamente o endereço que os amigos devem usar pra entrar — a
+// própria máquina do host sempre sabe seus IPs melhor do que qualquer
+// heurística de rede feita a partir do navegador.
+function getLocalIPv4s() {
+  const nets = os.networkInterfaces();
+  const results = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        results.push({ name, address: net.address });
+      }
+    }
+  }
+  return results;
+}
 
 // --- Servidor TURN (relay de mídia quando a conexão P2P direta falha) ---
 // Usa as mesmas credenciais fixas configuradas no client.js (public/client.js).
@@ -46,12 +64,15 @@ const server = http.createServer((req, res) => {
 //   Cliente -> Servidor:
 //     { type: 'hello', role: 'host' | 'viewer' }
 //     { type: 'offer'|'answer'|'ice', to: <id>, ...payload }
+//     { type: 'chat', name: <string>, text: <string> }
 //   Servidor -> Cliente:
 //     { type: 'welcome', id: <seuId> }
 //     { type: 'viewer-joined', id: <idDoViewer> }   (só o host recebe)
 //     { type: 'viewer-left', id: <idDoViewer> }      (só o host recebe)
+//     { type: 'local-ips', ips: [{name, address}] }  (só o host recebe, junto do viewer-joined)
 //     { type: 'host-left' }                          (viewers recebem)
 //     { type: 'offer'|'answer'|'ice', from: <id>, ...payload }  (repassado)
+//     { type: 'chat', name, text, ts }                (todo mundo recebe)
 
 const wss = new WebSocketServer({ server });
 
@@ -76,6 +97,7 @@ wss.on('connection', (ws) => {
       clients.get(id).role = msg.role;
       if (msg.role === 'host') {
         hostId = id;
+        send(ws, { type: 'local-ips', ips: getLocalIPv4s() });
       } else if (msg.role === 'viewer' && hostId !== null) {
         // avisa o host que um novo viewer chegou, pra ele criar a offer
         const host = clients.get(hostId);
@@ -88,6 +110,20 @@ wss.on('connection', (ws) => {
     if (['offer', 'answer', 'ice'].includes(msg.type) && msg.to != null) {
       const target = clients.get(msg.to);
       if (target) send(target.ws, { ...msg, from: id });
+      return;
+    }
+
+    // Chat: transmite pra todo mundo conectado (host + todos os viewers),
+    // incluindo quem mandou — assim não precisa de lógica separada de "eco".
+    if (msg.type === 'chat') {
+      const chatMsg = {
+        type: 'chat',
+        name: String(msg.name || 'Anônimo').slice(0, 24),
+        text: String(msg.text || '').slice(0, 300),
+        ts: Date.now(),
+      };
+      if (!chatMsg.text.trim()) return;
+      for (const [, c] of clients) send(c.ws, chatMsg);
     }
   });
 
