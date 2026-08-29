@@ -65,12 +65,14 @@ const server = http.createServer((req, res) => {
 //     { type: 'hello', role: 'host' | 'viewer' }
 //     { type: 'offer'|'answer'|'ice', to: <id>, ...payload }
 //     { type: 'chat', name: <string>, text: <string> }
+//     { type: 'stream-ended' }                      (só o host manda)
 //   Servidor -> Cliente:
 //     { type: 'welcome', id: <seuId> }
 //     { type: 'viewer-joined', id: <idDoViewer> }   (só o host recebe)
 //     { type: 'viewer-left', id: <idDoViewer> }      (só o host recebe)
 //     { type: 'local-ips', ips: [{name, address}] }  (só o host recebe, junto do viewer-joined)
 //     { type: 'host-left' }                          (viewers recebem)
+//     { type: 'stream-ended' }                       (viewers recebem)
 //     { type: 'offer'|'answer'|'ice', from: <id>, ...payload }  (repassado)
 //     { type: 'chat', name, text, ts }                (todo mundo recebe)
 
@@ -110,6 +112,14 @@ wss.on('connection', (ws) => {
     if (['offer', 'answer', 'ice'].includes(msg.type) && msg.to != null) {
       const target = clients.get(msg.to);
       if (target) send(target.ws, { ...msg, from: id });
+      return;
+    }
+
+    // Avisa todo mundo que o host parou de compartilhar (sem desconectar do
+    // WebSocket) — sem isso, quem está assistindo fica com o vídeo congelado
+    // no último frame, sem saber que a transmissão acabou.
+    if (msg.type === 'stream-ended' && id === hostId) {
+      for (const [, c] of clients) send(c.ws, { type: 'stream-ended' });
       return;
     }
 

@@ -31,9 +31,10 @@ let role = null;
 
 // host mantém uma RTCPeerConnection por viewer conectado
 const peerConnections = new Map(); // viewerId -> RTCPeerConnection
-// Viewers que entraram antes do host clicar em "Hospedar" ficam em espera —
-// sem isso, o "viewer-joined" deles chegaria com localStream ainda null.
-const pendingViewers = new Set();
+// Todos os viewers atualmente conectados, independente de já terem oferta
+// ou não — cobre tanto "entrou antes do host compartilhar" quanto "ficou
+// conectado depois que o host parou e está retomando".
+const connectedViewers = new Set();
 
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -49,23 +50,34 @@ function connectWS() {
 
       case 'viewer-joined':
         if (role === 'host') {
-          if (localStream) {
-            await createOfferFor(msg.id);
-          } else {
-            pendingViewers.add(msg.id); // ainda não começamos a compartilhar
-          }
+          connectedViewers.add(msg.id);
+          if (localStream) await createOfferFor(msg.id);
         }
         break;
 
       case 'viewer-left':
         if (role === 'host') {
-          pendingViewers.delete(msg.id);
+          connectedViewers.delete(msg.id);
           closeConnectionFor(msg.id);
         }
         break;
 
       case 'chat':
         appendChatMessage(msg);
+        break;
+
+      case 'stream-ended':
+        if (role === 'viewer') {
+          if (viewerPc) {
+            viewerPc.close();
+            viewerPc = null;
+          }
+          video.srcObject = null;
+          video.style.display = 'none';
+          volumeRow.style.display = 'none';
+          fullscreenBtn.style.display = 'none';
+          statusEl.textContent = 'O host parou de compartilhar. Aguardando...';
+        }
         break;
 
       case 'offer':
@@ -124,12 +136,12 @@ hostBtn.onclick = async () => {
 
   localStream.getVideoTracks()[0].onended = () => stopSharing();
 
-  // Cria a oferta agora pra qualquer viewer que já estava esperando na sala
-  // antes de você clicar em "Hospedar minha tela".
-  for (const viewerId of pendingViewers) {
+  // Cria a oferta agora pra todo mundo que já está conectado — cobre tanto
+  // quem entrou antes de você compartilhar quanto quem ficou na sala depois
+  // que você parou e agora está começando de novo.
+  for (const viewerId of connectedViewers) {
     await createOfferFor(viewerId);
   }
-  pendingViewers.clear();
 };
 
 async function createOfferFor(viewerId) {
@@ -273,7 +285,6 @@ function stopSharing() {
   for (const [, pc] of peerConnections) pc.close();
   peerConnections.clear();
   if (ws) ws.close();
-  localStream = null;
   video.style.display = 'none';
   stopBtn.style.display = 'none';
   volumeRow.style.display = 'none';

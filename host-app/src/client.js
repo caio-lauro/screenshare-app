@@ -29,11 +29,12 @@ const ICE_SERVERS = [
 let ws;
 let localStream = null; // stream original do getDisplayMedia (vídeo + áudio cru)
 const peerConnections = new Map(); // viewerId -> RTCPeerConnection
-// Viewers que entraram na sala ANTES de você clicar em "Compartilhar" ficam
-// aqui em espera — sem isso, o "viewer-joined" deles chegaria com
-// localStream ainda null, a oferta falharia silenciosamente, e ninguém
-// tentaria de novo depois que você começasse a compartilhar.
-const pendingViewers = new Set();
+// Todos os viewers atualmente conectados via WebSocket, independente de já
+// terem recebido uma oferta ou não. Cobre dois casos: (1) viewer entra antes
+// de você clicar em compartilhar, e (2) você para e recomeça a compartilhar
+// com o mesmo viewer ainda conectado — nos dois, é daqui que a gente sabe
+// pra quem reenviar oferta quando o compartilhamento (re)começa.
+const connectedViewers = new Set();
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -58,14 +59,11 @@ function connectToSidecar(attempt = 1) {
         renderShareUrl(msg.ips);
         break;
       case 'viewer-joined':
-        if (localStream) {
-          await createOfferFor(msg.id);
-        } else {
-          pendingViewers.add(msg.id); // ainda não começamos a compartilhar
-        }
+        connectedViewers.add(msg.id);
+        if (localStream) await createOfferFor(msg.id);
         break;
       case 'viewer-left':
-        pendingViewers.delete(msg.id);
+        connectedViewers.delete(msg.id);
         closeConnectionFor(msg.id);
         break;
       case 'chat':
@@ -160,12 +158,12 @@ hostBtn.onclick = async () => {
 
   localStream.getVideoTracks()[0].onended = () => stopSharing();
 
-  // Cria a oferta agora pra qualquer viewer que já estava esperando na sala
-  // antes de você clicar em compartilhar.
-  for (const viewerId of pendingViewers) {
+  // Cria oferta pra todo mundo que já está conectado — cobre tanto quem
+  // entrou antes de você compartilhar quanto quem ficou na sala depois que
+  // você parou e agora está começando de novo.
+  for (const viewerId of connectedViewers) {
     await createOfferFor(viewerId);
   }
-  pendingViewers.clear();
 };
 
 async function createOfferFor(viewerId) {
@@ -230,9 +228,12 @@ async function handleIce(msg) {
 
 function stopSharing() {
   if (localStream) localStream.getTracks().forEach((t) => t.stop());
+  localStream = null;
   for (const [, pc] of peerConnections) pc.close();
   peerConnections.clear();
-  localStream = null;
+  // Avisa quem estava assistindo pra limpar a tela — sem isso, o vídeo deles
+  // fica travado no último frame recebido, parecendo que ainda está ao vivo.
+  send({ type: 'stream-ended' });
   liveBadge.style.display = 'none';
   stopBtn.style.display = 'none';
   hostBtn.style.display = 'inline-block';
