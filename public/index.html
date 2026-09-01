@@ -70,6 +70,13 @@
   #fullscreenBtn { display: none; margin-top: 4px; padding: 8px 16px; font-size: 0.85rem; }
   #stopBtn { background: #d9433f; margin-top: 16px; }
   #stopBtn:hover { background: #e8615d; }
+  #hostFallback {
+    font-size: 0.8rem;
+    margin-top: -10px;
+    margin-bottom: 10px;
+  }
+  #hostFallback a { color: #666; text-decoration: underline; cursor: pointer; }
+  #hostFallback a:hover { color: #999; }
   #chatPanel {
     display: none;
     flex-direction: column;
@@ -121,9 +128,12 @@
   <h1>🖥️ Compartilhamento de Tela</h1>
   <div id="status">Escolha uma opção abaixo</div>
 
-  <div class="choice" id="choiceButtons">
+  <div class="choice" id="choiceButtons" style="display:none">
     <button id="hostBtn">Hospedar minha tela</button>
     <button id="viewBtn">Entrar em uma sala</button>
+  </div>
+  <div id="hostFallback">
+    <a href="#" id="hostFallbackLink">Prefere hospedar pelo navegador em vez do app?</a>
   </div>
 
   <div id="mainLayout">

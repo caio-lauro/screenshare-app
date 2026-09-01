@@ -1,5 +1,7 @@
 const statusEl = document.getElementById('status');
 const choiceButtons = document.getElementById('choiceButtons');
+const hostFallback = document.getElementById('hostFallback');
+const hostFallbackLink = document.getElementById('hostFallbackLink');
 const hostBtn = document.getElementById('hostBtn');
 const viewBtn = document.getElementById('viewBtn');
 const video = document.getElementById('video');
@@ -187,7 +189,7 @@ async function handleAnswer(msg) {
 }
 
 // ---------- VIEWER ----------
-viewBtn.onclick = () => {
+function startViewing() {
   role = 'viewer';
   connectWS();
   ws.onopen = () => {
@@ -196,7 +198,24 @@ viewBtn.onclick = () => {
   };
 
   choiceButtons.style.display = 'none';
+  hostFallback.style.display = 'none';
   statusEl.textContent = 'Aguardando o host começar a compartilhar...';
+}
+
+viewBtn.onclick = startViewing;
+
+// A grande maioria de quem abre esse link é amigo entrando pra assistir (o
+// host já roda pelo app, não pelo navegador) — então já entra direto nessa
+// tela, sem precisar clicar em nada. Quem realmente quiser hospedar pelo
+// navegador ainda pode, pelo link discreto abaixo.
+startViewing();
+
+hostFallbackLink.onclick = (e) => {
+  e.preventDefault();
+  if (ws) ws.close();
+  choiceButtons.style.display = 'flex';
+  hostFallback.style.display = 'none';
+  statusEl.textContent = 'Escolha uma opção abaixo';
 };
 
 let viewerPc = null;
