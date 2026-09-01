@@ -198,7 +198,6 @@ function startViewing() {
   };
 
   choiceButtons.style.display = 'none';
-  hostFallback.style.display = 'none';
   statusEl.textContent = 'Aguardando o host começar a compartilhar...';
 }
 
