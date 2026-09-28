@@ -134,7 +134,15 @@ hostBtn.onclick = async () => {
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 30 },
-      audio: true,
+      audio: {
+        // Desliga processamento pensado pra voz de chamada (cancelamento de
+        // eco, redução de ruído, ganho automático) — isso existe pra
+        // melhorar chamadas de voz, mas degrada áudio de jogo/filme/música.
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2, // pede estéreo; o navegador cai pra mono se não suportar
+      },
       // Pede pro Chromium/WebView2 oferecer só o áudio da janela escolhida,
       // em vez do sistema inteiro — assim o Discord fica de fora quando você
       // compartilha uma janela específica (ex: um jogo) em vez de "Tela inteira".
@@ -198,8 +206,33 @@ async function createOfferFor(viewerId) {
   };
 
   const offer = await pc.createOffer();
+  offer.sdp = forceGoodOpusAudio(offer.sdp);
   await pc.setLocalDescription(offer);
   send({ type: 'offer', to: viewerId, sdp: offer });
+}
+
+// Por padrão, o Opus no Chromium/WebView2 costuma sair em mono e com
+// bitrate baixo (pensado pra voz, ~32-40kbps) — bom pra chamada, ruim pra
+// áudio de jogo/filme. Isso edita o SDP da oferta pra pedir estéreo de
+// verdade e um bitrate bem mais alto (128kbps), direto no parâmetro do
+// codec — técnica padrão em apps WebRTC pra esse tipo de ajuste fino que a
+// API de alto nível não expõe.
+function forceGoodOpusAudio(sdp) {
+  const opusMatch = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/);
+  if (!opusMatch) return sdp; // opus não encontrado, mantém sem alteração
+
+  const payload = opusMatch[1];
+  const extra = 'stereo=1;sprop-stereo=1;maxaveragebitrate=128000';
+  const fmtpRegex = new RegExp(`a=fmtp:${payload} (.+)\r\n`);
+
+  if (fmtpRegex.test(sdp)) {
+    return sdp.replace(fmtpRegex, (_match, params) => `a=fmtp:${payload} ${params};${extra}\r\n`);
+  }
+  // Sem linha fmtp existente pra esse payload — cria uma nova logo após o rtpmap.
+  return sdp.replace(
+    `a=rtpmap:${payload} opus/48000/2\r\n`,
+    `a=rtpmap:${payload} opus/48000/2\r\na=fmtp:${payload} ${extra}\r\n`
+  );
 }
 
 function closeConnectionFor(viewerId) {

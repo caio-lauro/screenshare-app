@@ -112,7 +112,12 @@ hostBtn.onclick = async () => {
   try {
     localStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 30 },
-      audio: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2,
+      },
       // Pede pro navegador oferecer só o áudio da janela escolhida (não o
       // sistema inteiro) quando você compartilhar uma janela específica.
       windowAudio: 'window',
@@ -171,8 +176,30 @@ async function createOfferFor(viewerId) {
   };
 
   const offer = await pc.createOffer();
+  offer.sdp = forceGoodOpusAudio(offer.sdp);
   await pc.setLocalDescription(offer);
   send({ type: 'offer', to: viewerId, sdp: offer });
+}
+
+// Por padrão, o Opus no navegador costuma sair em mono e com bitrate baixo
+// (pensado pra voz, ~32-40kbps) — bom pra chamada, ruim pra áudio de
+// jogo/filme. Isso edita o SDP da oferta pra pedir estéreo de verdade e um
+// bitrate bem mais alto (128kbps), direto no parâmetro do codec.
+function forceGoodOpusAudio(sdp) {
+  const opusMatch = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/);
+  if (!opusMatch) return sdp; // opus não encontrado, mantém sem alteração
+
+  const payload = opusMatch[1];
+  const extra = 'stereo=1;sprop-stereo=1;maxaveragebitrate=128000';
+  const fmtpRegex = new RegExp(`a=fmtp:${payload} (.+)\r\n`);
+
+  if (fmtpRegex.test(sdp)) {
+    return sdp.replace(fmtpRegex, (_match, params) => `a=fmtp:${payload} ${params};${extra}\r\n`);
+  }
+  return sdp.replace(
+    `a=rtpmap:${payload} opus/48000/2\r\n`,
+    `a=rtpmap:${payload} opus/48000/2\r\na=fmtp:${payload} ${extra}\r\n`
+  );
 }
 
 function closeConnectionFor(viewerId) {
@@ -198,6 +225,7 @@ function startViewing() {
   };
 
   choiceButtons.style.display = 'none';
+  hostFallback.style.display = 'none';
   statusEl.textContent = 'Aguardando o host começar a compartilhar...';
 }
 
